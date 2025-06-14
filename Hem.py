@@ -3,6 +3,8 @@ import sys
 import subprocess
 import shutil
 import re
+import tempfile
+import urllib.request
 
 LOG_FILE = "hem_log.txt"
 
@@ -34,6 +36,33 @@ def check_program(cmd):
         return True
     except Exception:
         return False
+
+def install_git():
+    """Attempt to download and install Git silently."""
+    log("Próba automatycznej instalacji Git...")
+    try:
+        if os.name == "nt":
+            url = (
+                "https://github.com/git-for-windows/git/releases/latest/download/Git-2.44.0-64-bit.exe"
+            )
+            installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
+            urllib.request.urlretrieve(url, installer)
+            subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
+        else:
+            if shutil.which("apt-get"):
+                subprocess.run(["sudo", "apt-get", "update", "-y"], check=True)
+                subprocess.run(["sudo", "apt-get", "install", "-y", "git"], check=True)
+            elif shutil.which("yum"):
+                subprocess.run(["sudo", "yum", "-y", "install", "git"], check=True)
+            elif shutil.which("brew"):
+                subprocess.run(["brew", "install", "git"], check=True)
+            else:
+                log("Automatyczna instalacja Git nie jest obsługiwana na tym systemie.")
+                return False
+    except Exception as exc:
+        log(f"Błąd instalacji Git: {exc}")
+        return False
+    return check_program("git")
 
 def clone_repo(url, target_dir):
     if os.path.exists(target_dir):
@@ -127,8 +156,9 @@ def main():
     target_path = os.path.join("projekty", repo_name)
     if not check_program("git"):
         log("Git nie jest zainstalowany!")
-        pause()
-        return
+        if not install_git():
+            pause()
+            return
     if not clone_repo(url, target_path):
         pause()
         return
