@@ -12,11 +12,7 @@ def log(msg):
         f.write(msg + "\n")
 
 def pause(msg="Naciśnij dowolny klawisz, aby zakończyć..."):
-    """Pause execution waiting for user input."""
-    try:
-        input(msg)
-    except EOFError:
-        pass
+    os.system("pause >nul" if os.name == "nt" else "read -n 1 -s -r -p 'Press any key...'")
 
 def clear_log():
     if os.path.exists(LOG_FILE):
