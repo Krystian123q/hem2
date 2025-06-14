@@ -5,7 +5,6 @@ import shutil
 import re
 import tempfile
 import urllib.request
-import json
 
 LOG_FILE = "hem_log.txt"
 
@@ -38,37 +37,6 @@ def check_program(cmd):
     except Exception:
         return False
 
-def install_via_pkg_mgr(packages):
-    """Install the given packages using the available package manager."""
-    try:
-        if shutil.which("apt-get"):
-            subprocess.run(["sudo", "apt-get", "update", "-y"], check=True)
-            subprocess.run(["sudo", "apt-get", "install", "-y"] + packages, check=True)
-        elif shutil.which("yum"):
-            subprocess.run(["sudo", "yum", "-y", "install"] + packages, check=True)
-        elif shutil.which("brew"):
-            subprocess.run(["brew", "install"] + packages, check=True)
-        else:
-            return False
-    except Exception as exc:
-        log(f"Błąd instalacji pakietu: {exc}")
-        return False
-    return True
-
-def get_latest_git_url():
-    """Return download URL for the latest Git for Windows installer."""
-    api = "https://api.github.com/repos/git-for-windows/git/releases/latest"
-    try:
-        with urllib.request.urlopen(api) as resp:
-            data = json.load(resp)
-        for asset in data.get("assets", []):
-            name = asset.get("name", "")
-            if name.endswith("64-bit.exe"):
-                return asset.get("browser_download_url")
-    except Exception as exc:
-        log(f"Nie udało się pobrać info o najnowszym Git: {exc}")
-    return "https://github.com/git-for-windows/git/releases/latest/download/Git-64-bit.exe"
-
 def install_git():
     """Attempt to download and install Git silently."""
     log("Próba automatycznej instalacji Git...")
@@ -79,81 +47,27 @@ def install_git():
             elif shutil.which("choco"):
                 subprocess.run(["choco", "install", "git", "-y"], check=True)
             else:
-                url = get_latest_git_url()
+                url = (
+                    "https://github.com/git-for-windows/git/releases/latest/download/Git-64-bit.exe"
+                )
                 installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
                 urllib.request.urlretrieve(url, installer)
                 subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
         else:
-            if not install_via_pkg_mgr(["git"]):
+            if shutil.which("apt-get"):
+                subprocess.run(["sudo", "apt-get", "update", "-y"], check=True)
+                subprocess.run(["sudo", "apt-get", "install", "-y", "git"], check=True)
+            elif shutil.which("yum"):
+                subprocess.run(["sudo", "yum", "-y", "install", "git"], check=True)
+            elif shutil.which("brew"):
+                subprocess.run(["brew", "install", "git"], check=True)
+            else:
                 log("Automatyczna instalacja Git nie jest obsługiwana na tym systemie.")
                 return False
     except Exception as exc:
         log(f"Błąd instalacji Git: {exc}")
         return False
     return check_program("git")
-
-def install_python():
-    log("Próba automatycznej instalacji Pythona...")
-    try:
-        if os.name == "nt":
-            url = "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
-            installer = os.path.join(tempfile.gettempdir(), "python_installer.exe")
-            urllib.request.urlretrieve(url, installer)
-            subprocess.run([installer, "/quiet", "InstallAllUsers=1", "PrependPath=1"], check=True)
-        else:
-            if not install_via_pkg_mgr(["python3", "python3-pip"]):
-                return False
-    except Exception as exc:
-        log(f"Błąd instalacji Pythona: {exc}")
-        return False
-    return check_program("python3") or check_program("python")
-
-def install_node():
-    log("Próba automatycznej instalacji Node.js...")
-    try:
-        if os.name == "nt":
-            url = "https://nodejs.org/dist/v20.10.0/node-v20.10.0-x64.msi"
-            installer = os.path.join(tempfile.gettempdir(), "node_installer.msi")
-            urllib.request.urlretrieve(url, installer)
-            subprocess.run(["msiexec", "/i", installer, "/quiet", "/norestart"], check=True)
-        else:
-            if not install_via_pkg_mgr(["nodejs", "npm"]):
-                return False
-    except Exception as exc:
-        log(f"Błąd instalacji Node.js: {exc}")
-        return False
-    return check_program("npm")
-
-def install_rust():
-    log("Próba automatycznej instalacji Rust...")
-    try:
-        if os.name == "nt":
-            url = "https://win.rustup.rs/x86_64"
-            installer = os.path.join(tempfile.gettempdir(), "rustup-init.exe")
-            urllib.request.urlretrieve(url, installer)
-            subprocess.run([installer, "-y"], check=True)
-        else:
-            subprocess.run(["sh", "-c", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"], check=True)
-    except Exception as exc:
-        log(f"Błąd instalacji Rust: {exc}")
-        return False
-    return check_program("cargo")
-
-def ensure_program(cmd):
-    if check_program(cmd):
-        return True
-    installers = {
-        "git": install_git,
-        "python": install_python,
-        "python3": install_python,
-        "npm": install_node,
-        "node": install_node,
-        "cargo": install_rust,
-    }
-    installer = installers.get(cmd)
-    if installer:
-        return installer()
-    return False
 
 def clone_repo(url, target_dir):
     if os.path.exists(target_dir):
@@ -182,10 +96,8 @@ def install_deps_and_run(path, proj_type):
     if proj_type == "python":
         python = shutil.which("python") or shutil.which("python3")
         if not python:
-            if not ensure_program("python3"):
-                log("Python nie jest zainstalowany!")
-                return False
-            python = shutil.which("python") or shutil.which("python3")
+            log("Python nie jest zainstalowany!")
+            return False
         if os.path.exists("requirements.txt"):
             log("Instaluję zależności Pythona...")
             res = subprocess.run([python, "-m", "pip", "install", "-r", "requirements.txt"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -207,7 +119,7 @@ def install_deps_and_run(path, proj_type):
         else:
             log("Nie znaleziono pliku main.py")
     elif proj_type == "node":
-        if not ensure_program("npm"):
+        if not check_program("npm"):
             log("Node.js/npm nie jest zainstalowany!")
             return False
         log("Instaluję zależności Node.js (npm install)...")
@@ -220,7 +132,7 @@ def install_deps_and_run(path, proj_type):
         res = subprocess.run(["npm", "start"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         log(res.stdout + res.stderr)
     elif proj_type == "rust":
-        if not ensure_program("cargo"):
+        if not check_program("cargo"):
             log("Rust/cargo nie jest zainstalowany!")
             return False
         log("Instaluję zależności Rust (cargo build)...")
@@ -247,10 +159,11 @@ def main():
         url = input("Wklej link do repozytorium (np. https://github.com/realpython/materials.git): ").strip()
     repo_name = get_repo_name(url)
     target_path = os.path.join("projekty", repo_name)
-    if not ensure_program("git"):
+    if not check_program("git"):
         log("Git nie jest zainstalowany!")
-        pause()
-        return
+        if not install_git():
+            pause()
+            return
     if not clone_repo(url, target_path):
         pause()
         return
