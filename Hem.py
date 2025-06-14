@@ -59,10 +59,15 @@ def install_git():
     log("Próba automatycznej instalacji Git...")
     try:
         if os.name == "nt":
-            url = "https://github.com/git-for-windows/git/releases/latest/download/Git-2.44.0-64-bit.exe"
-            installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
-            urllib.request.urlretrieve(url, installer)
-            subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
+            if shutil.which("winget"):
+                subprocess.run(["winget", "install", "--id", "Git.Git", "-e", "--silent"], check=True)
+            elif shutil.which("choco"):
+                subprocess.run(["choco", "install", "git", "-y"], check=True)
+            else:
+                url = "https://github.com/git-for-windows/git/releases/latest/download/Git-64-bit.exe"
+                installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
+                urllib.request.urlretrieve(url, installer)
+                subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
         else:
             if not install_via_pkg_mgr(["git"]):
                 log("Automatyczna instalacja Git nie jest obsługiwana na tym systemie.")
