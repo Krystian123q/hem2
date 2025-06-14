@@ -5,6 +5,7 @@ import shutil
 import re
 import tempfile
 import urllib.request
+import json
 
 LOG_FILE = "hem_log.txt"
 
@@ -54,16 +55,43 @@ def install_via_pkg_mgr(packages):
         return False
     return True
 
+def get_latest_git_url():
+    """Return download URL for the latest 64-bit Git for Windows installer."""
+    api_url = "https://api.github.com/repos/git-for-windows/git/releases/latest"
+    with urllib.request.urlopen(api_url) as resp:
+        data = json.load(resp)
+    for asset in data.get("assets", []):
+        name = asset.get("name", "")
+        if name.endswith("64-bit.exe"):
+            return asset.get("browser_download_url")
+    return None
+
 def install_git():
     """Attempt to download and install Git silently."""
     log("Próba automatycznej instalacji Git...")
     installer = None
     try:
         if os.name == "nt":
-            url = "https://github.com/git-for-windows/git/releases/latest/download/Git-2.44.0-64-bit.exe"
-            installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
-            urllib.request.urlretrieve(url, installer)
-            subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
+            if shutil.which("winget"):
+                subprocess.run([
+                    "winget",
+                    "install",
+                    "--id",
+                    "Git.Git",
+                    "-e",
+                    "--source",
+                    "winget",
+                ], check=True)
+            elif shutil.which("choco"):
+                subprocess.run(["choco", "install", "git", "-y"], check=True)
+            else:
+                url = get_latest_git_url()
+                if not url:
+                    log("Nie udało się pobrać linku do instalatora Git.")
+                    return False
+                installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
+                urllib.request.urlretrieve(url, installer)
+                subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
         else:
             if not install_via_pkg_mgr(["git"]):
                 log("Automatyczna instalacja Git nie jest obsługiwana na tym systemie.")
