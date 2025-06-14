@@ -83,6 +83,7 @@ def install_git():
                 installer = os.path.join(tempfile.gettempdir(), "git_installer.exe")
                 urllib.request.urlretrieve(url, installer)
                 subprocess.run([installer, "/VERYSILENT", "/NORESTART"], check=True)
+
         else:
             if not install_via_pkg_mgr(["git"]):
                 log("Automatyczna instalacja Git nie jest obsługiwana na tym systemie.")
